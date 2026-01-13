@@ -91,9 +91,10 @@ async function main() {
       .filter(Boolean)
       .join(' | ');
 
+    // ===== RANGE GIỮ 4 DÒNG ĐẦU =====
     const ranges = [
-      { start: 1, end: 35, idx: 1 },
-      { start: 36, end: 70, idx: 2 }
+      { start: 1, end: 39, idx: 1 },   // ảnh 1
+      { start: 33, end: 70, idx: 2 }   // ảnh 2 (lặp header)
     ];
 
     const imagePaths = [];
@@ -123,7 +124,7 @@ async function main() {
       fs.unlinkSync(pdfPath);
     }
 
-    // ===== GỬI 2 ẢNH LIỀN 1 LẦN – CAPTION Ở ẢNH 2 =====
+    // ===== GỬI 2 ẢNH LIỀN – CAPTION Ở ẢNH 2 =====
     const form = new FormData();
     form.append('chat_id', TELEGRAM_CHAT_ID);
 
@@ -154,12 +155,11 @@ async function main() {
     // ===== DỌN FILE =====
     imagePaths.forEach(p => fs.unlinkSync(p));
 
-    // tránh flood
     await new Promise(r => setTimeout(r, 1500));
   }
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  console.log('✅ Hoàn tất – mỗi sheet gửi 2 ảnh, tiêu đề chỉ ở ảnh 2');
+  console.log('✅ Hoàn tất – giữ 4 dòng đầu cho cả 2 ảnh');
 }
 
 main().catch(err => {
