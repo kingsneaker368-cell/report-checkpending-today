@@ -8,7 +8,6 @@ const FormData = require('form-data');
 const { google } = require('googleapis');
 const sharp = require('sharp');
 
-// ===== Retry Google 429 =====
 async function fetchPdfWithRetry(url, headers, attempt = 1) {
   try {
     return await axios.get(url, {
@@ -24,7 +23,6 @@ async function fetchPdfWithRetry(url, headers, attempt = 1) {
   }
 }
 
-// ===== PDF → PNG =====
 function convertPdfToPng(pdfPath, outPrefix) {
   return new Promise((resolve, reject) => {
     execFile(
@@ -81,7 +79,7 @@ async function main() {
 
     const gid = sheet.properties.sheetId;
 
-    // ===== TIÊU ĐỀ (A1 + B1) =====
+    // ===== TITLE A1 + B1 =====
     const titleRes = await sheetsApi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A1:B1`
@@ -91,14 +89,13 @@ async function main() {
       .filter(Boolean)
       .join(' | ');
 
-    // ===== 2 RANGE / 2 ẢNH =====
     const ranges = [
       { start: 1, end: 35, idx: 1 },
       { start: 36, end: 70, idx: 2 }
     ];
 
     const media = [];
-    const filesToClean = [];
+    const buffers = [];
 
     for (const r of ranges) {
       const range = `${sheetName}!A${r.start}:AO${r.end}`;
@@ -120,36 +117,37 @@ async function main() {
         pdfPath.replace('.pdf', '')
       );
 
-      filesToClean.push(pdfPath, pngPath);
+      buffers.push(fs.readFileSync(pngPath));
 
       media.push({
         type: 'photo',
-        media: `attach://photo${r.idx}`
+        media: `attach://file${r.idx}`
       });
+
+      fs.unlinkSync(pdfPath);
+      fs.unlinkSync(pngPath);
     }
 
-    // Caption chỉ gắn cho ảnh đầu tiên
+    // Caption chỉ gắn cho ảnh đầu
     media[0].caption = titleText;
 
     const form = new FormData();
     form.append('chat_id', TELEGRAM_CHAT_ID);
     form.append('media', JSON.stringify(media));
 
-    form.append('photo1', fs.readFileSync(path.join(tmpDir, `${sheetName}-1.png`)));
-    form.append('photo2', fs.readFileSync(path.join(tmpDir, `${sheetName}-2.png`)));
+    buffers.forEach((buf, i) => {
+      form.append(`file${i + 1}`, buf);
+    });
 
     await axios.post(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup`,
       form,
       { headers: form.getHeaders() }
     );
-
-    // cleanup
-    for (const f of filesToClean) fs.unlinkSync(f);
   }
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  console.log('✅ Hoàn tất – mỗi sheet gửi 1 album (2 ảnh, 1 tiêu đề)');
+  console.log('✅ OK – mỗi sheet gửi 1 album (2 ảnh, 1 tiêu đề)');
 }
 
 main().catch(err => {
