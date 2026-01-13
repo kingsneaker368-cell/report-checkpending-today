@@ -17,8 +17,7 @@ async function fetchPdfWithRetry(url, headers, attempt = 1) {
     });
   } catch (err) {
     if (err.response?.status === 429 && attempt < 5) {
-      const delay = 3000 + Math.floor(Math.random() * 3000);
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise(r => setTimeout(r, 3000));
       return fetchPdfWithRetry(url, headers, attempt + 1);
     }
     throw err;
@@ -82,7 +81,7 @@ async function main() {
 
     const gid = sheet.properties.sheetId;
 
-    // ===== TIÊU ĐỀ A1 → B1 =====
+    // ===== LẤY TIÊU ĐỀ A1:B1 =====
     const titleRes = await sheetsApi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A1:B1`
@@ -92,12 +91,14 @@ async function main() {
       .filter(Boolean)
       .join(' | ');
 
-    // ===== 2 ẢNH / SHEET (35 DÒNG / ẢNH) =====
     const ranges = [
-      { start: 1, end: 35, index: 1 },
-      { start: 36, end: 70, index: 2 }
+      { start: 1, end: 35, idx: 1 },
+      { start: 36, end: 70, idx: 2 }
     ];
 
+    const imagePaths = [];
+
+    // ===== CHỤP 2 ẢNH =====
     for (const r of ranges) {
       const range = `${sheetName}!A${r.start}:AO${r.end}`;
 
@@ -110,10 +111,7 @@ async function main() {
         Authorization: `Bearer ${accessToken}`
       });
 
-      const pdfPath = path.join(
-        tmpDir,
-        `${sheetName}-${r.index}.pdf`
-      );
+      const pdfPath = path.join(tmpDir, `${sheetName}-${r.idx}.pdf`);
       fs.writeFileSync(pdfPath, pdfResp.data);
 
       const pngPath = await convertPdfToPng(
@@ -121,28 +119,47 @@ async function main() {
         pdfPath.replace('.pdf', '')
       );
 
-      // ===== SEND TELEGRAM =====
-      const form = new FormData();
-      form.append('chat_id', TELEGRAM_CHAT_ID);
-      form.append(
-        'caption',
-        `${titleText}\n(Ảnh ${r.index}/2)`
-      );
-      form.append('photo', fs.createReadStream(pngPath));
-
-      await axios.post(
-        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`,
-        form,
-        { headers: form.getHeaders() }
-      );
-
+      imagePaths.push(pngPath);
       fs.unlinkSync(pdfPath);
-      fs.unlinkSync(pngPath);
     }
+
+    // ===== GỬI 2 ẢNH LIỀN 1 LẦN – CAPTION Ở ẢNH 2 =====
+    const form = new FormData();
+    form.append('chat_id', TELEGRAM_CHAT_ID);
+
+    form.append(
+      'media',
+      JSON.stringify([
+        {
+          type: 'photo',
+          media: 'attach://photo1'
+        },
+        {
+          type: 'photo',
+          media: 'attach://photo2',
+          caption: titleText
+        }
+      ])
+    );
+
+    form.append('photo1', fs.createReadStream(imagePaths[0]));
+    form.append('photo2', fs.createReadStream(imagePaths[1]));
+
+    await axios.post(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup`,
+      form,
+      { headers: form.getHeaders() }
+    );
+
+    // ===== DỌN FILE =====
+    imagePaths.forEach(p => fs.unlinkSync(p));
+
+    // tránh flood
+    await new Promise(r => setTimeout(r, 1500));
   }
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  console.log('✅ Hoàn tất – 2 sheet, mỗi sheet 2 ảnh (A → AO)');
+  console.log('✅ Hoàn tất – mỗi sheet gửi 2 ảnh, tiêu đề chỉ ở ảnh 2');
 }
 
 main().catch(err => {
