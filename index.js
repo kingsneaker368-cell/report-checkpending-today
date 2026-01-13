@@ -8,7 +8,6 @@ const FormData = require('form-data');
 const { google } = require('googleapis');
 const sharp = require('sharp');
 
-// ===== Retry Google 429 =====
 async function fetchPdfWithRetry(url, headers, attempt = 1) {
   try {
     return await axios.get(url, {
@@ -17,15 +16,13 @@ async function fetchPdfWithRetry(url, headers, attempt = 1) {
     });
   } catch (err) {
     if (err.response?.status === 429 && attempt < 5) {
-      const delay = 3000 + Math.floor(Math.random() * 3000);
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise(r => setTimeout(r, 3000));
       return fetchPdfWithRetry(url, headers, attempt + 1);
     }
     throw err;
   }
 }
 
-// ===== PDF → PNG =====
 function convertPdfToPng(pdfPath, outPrefix) {
   return new Promise((resolve, reject) => {
     execFile(
@@ -82,7 +79,6 @@ async function main() {
 
     const gid = sheet.properties.sheetId;
 
-    // ===== TIÊU ĐỀ A1 → B1 =====
     const titleRes = await sheetsApi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A1:B1`
@@ -92,7 +88,6 @@ async function main() {
       .filter(Boolean)
       .join(' | ');
 
-    // ===== 2 ẢNH / SHEET (35 DÒNG / ẢNH) =====
     const ranges = [
       { start: 1, end: 35, index: 1 },
       { start: 36, end: 70, index: 2 }
@@ -110,10 +105,7 @@ async function main() {
         Authorization: `Bearer ${accessToken}`
       });
 
-      const pdfPath = path.join(
-        tmpDir,
-        `${sheetName}-${r.index}.pdf`
-      );
+      const pdfPath = path.join(tmpDir, `${sheetName}-${r.index}.pdf`);
       fs.writeFileSync(pdfPath, pdfResp.data);
 
       const pngPath = await convertPdfToPng(
@@ -121,13 +113,9 @@ async function main() {
         pdfPath.replace('.pdf', '')
       );
 
-      // ===== SEND TELEGRAM =====
       const form = new FormData();
       form.append('chat_id', TELEGRAM_CHAT_ID);
-      form.append(
-        'caption',
-        `${titleText}\n(Ảnh ${r.index}/2)`
-      );
+      form.append('caption', `${titleText}\n(Ảnh ${r.index}/2)`);
       form.append('photo', fs.createReadStream(pngPath));
 
       await axios.post(
@@ -136,13 +124,16 @@ async function main() {
         { headers: form.getHeaders() }
       );
 
+      // ✅ FIX FLOOD LIMIT
+      await new Promise(r => setTimeout(r, 1500));
+
       fs.unlinkSync(pdfPath);
       fs.unlinkSync(pngPath);
     }
   }
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  console.log('✅ Hoàn tất – 2 sheet, mỗi sheet 2 ảnh (A → AO)');
+  console.log('✅ Đã gửi đủ 2 ảnh / sheet');
 }
 
 main().catch(err => {
