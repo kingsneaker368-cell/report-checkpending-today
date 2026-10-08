@@ -3,10 +3,20 @@ name: Export Sheets to Telegram
 
 on:
   workflow_dispatch:
-
-  schedule:
-    # Quét lịch mỗi 5 phút, lệch 2 phút so với mốc tròn
-    - cron: '2-59/5 * * * *'
+    inputs:
+      run_mode:
+        description: 'manual hoặc auto'
+        required: false
+        default: 'manual'
+        type: choice
+        options:
+          - manual
+          - auto
+      slot_id:
+        description: 'Mã lần chụp tự động'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -47,8 +57,6 @@ jobs:
           MAX_ROWS_PER_FILE: ${{ secrets.MAX_ROWS_PER_FILE }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-          # Phân biệt chạy tự động và thủ công
-          RUN_MODE: ${{ github.event_name == 'schedule' && 'auto' || 'manual' }}
-
+          RUN_MODE: ${{ inputs.run_mode }}
+          SLOT_ID: ${{ inputs.slot_id }}
         run: node index.js
