@@ -1,11 +1,24 @@
-name: Export Sheets to Telegram (manual)
+
+name: Export Sheets to Telegram
 
 on:
   workflow_dispatch:
 
+  schedule:
+    # Kiểm tra mỗi 10 phút. Giờ thực chạy có thể bị trễ.
+    - cron: '*/10 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: export-checkpending-telegram
+  cancel-in-progress: false
+
 jobs:
   export:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repo
@@ -16,7 +29,7 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install PDF tools (pdftoppm + ImageMagick + Ghostscript)
+      - name: Install PDF tools
         run: |
           sudo apt-get update
           sudo apt-get install -y poppler-utils imagemagick ghostscript
@@ -34,4 +47,5 @@ jobs:
           MAX_ROWS_PER_FILE: ${{ secrets.MAX_ROWS_PER_FILE }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_MODE: ${{ github.event_name == 'schedule' && 'auto' || 'manual' }}
         run: node index.js
